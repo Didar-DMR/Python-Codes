@@ -2,24 +2,19 @@ import cv2
 import numpy as np
 import time
 
-# --- 1. DOSYA YOLLARINI TANIMLAMA (TINY MODELLER İLE GÜNCELLENDİ) ---
 MODEL_CFG = 'yolov3-tiny.cfg'
 MODEL_WEIGHTS = 'yolov3-tiny.weights'
 CLASSES_FILE = 'coco.names'
 
-# IP Webcam'den aldığınız URL'yi BURAYA yazın.
-# Örn: "http://192.168.1.120:8080/video"
 IP_CAMERA_URL = "http://192.168.1.120:8080/video" 
 
-# Güven eşiği
 CONFIDENCE_THRESHOLD = 0.5
-# Non-Maximum Suppression eşiği
+
 NMS_THRESHOLD = 0.4
-# Tiny modelinin beklediği giriş boyutu (416 yaygın ve dengelidir)
+
 INPUT_WIDTH = 416
 INPUT_HEIGHT = 416
 
-# --- 2. SINIF İSİMLERİNİ YÜKLEME ---
 try:
     with open(CLASSES_FILE, 'r') as f:
         classes = [line.strip() for line in f.readlines()]
@@ -27,26 +22,20 @@ except FileNotFoundError:
     print(f"HATA: '{CLASSES_FILE}' dosyası bulunamadı. Lütfen gerekli dosyaları indirdiğinizden emin olun.")
     exit()
 
-# Görselleştirme için rastgele renkler
 np.random.seed(42)
 colors = np.random.randint(0, 255, size=(len(classes), 3), dtype='uint8')
 
-# --- 3. MODELİ YÜKLEME (YOLOv3-Tiny) ---
 try:
     net = cv2.dnn.readNet(MODEL_WEIGHTS, MODEL_CFG)
     net.setPreferableBackend(cv2.dnn.DNN_BACKEND_OPENCV)
-    # CPU'da çalışmayı tercih et (performans için önemlidir)
     net.setPreferableTarget(cv2.dnn.DNN_TARGET_CPU) 
 except cv2.error as e:
     print(f"HATA: YOLO-Tiny dosyalarını yüklerken bir sorun oluştu. Dosya adlarını kontrol edin: {e}")
     exit()
 
-# Çıktı katmanlarının adlarını al
 layer_names = net.getLayerNames()
 output_layers = [layer_names[i - 1] for i in net.getUnconnectedOutLayers()]
 
-
-# --- 4. YARDIMCI İŞLEV: TESPİT SONUÇLARINI İŞLEME ---
 def process_detections(frame, outputs):
     height, width, _ = frame.shape
     boxes = []
@@ -72,10 +61,8 @@ def process_detections(frame, outputs):
                 confidences.append(float(confidence))
                 class_ids.append(class_id)
 
-    # Non-Maximum Suppression (NMS) uygula
     indexes = cv2.dnn.NMSBoxes(boxes, confidences, CONFIDENCE_THRESHOLD, NMS_THRESHOLD)
-    
-    # Kalan (en iyi) tespitleri çiz
+
     for i in indexes:
         if isinstance(i, np.ndarray):
             i = i[0]
@@ -90,8 +77,6 @@ def process_detections(frame, outputs):
         cv2.rectangle(frame, (x, y), (x + w, y + h), color, 2)
         cv2.putText(frame, text, (x, y - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.6, color, 2)
 
-
-# --- 5. CANLI GÖRÜNTÜ İŞLEME ---
 cap = cv2.VideoCapture(IP_CAMERA_URL)
 
 if not cap.isOpened():
@@ -104,27 +89,22 @@ while cap.isOpened():
     ret, frame = cap.read()
     if not ret:
         print("UYARI: Kare (frame) okunamadı. Akış kesilmiş olabilir.")
-        # Akış kesilirse biraz bekleyip tekrar dene
         time.sleep(0.1) 
         continue
-        
-    # Görüntüyü YOLO'nun beklediği formata dönüştür (Blob oluşturma)
+
     blob = cv2.dnn.blobFromImage(frame, 1/255.0, (INPUT_WIDTH, INPUT_HEIGHT), swapRB=True, crop=False)
-    
-    # İleri besleme (forward pass) yap
+
     net.setInput(blob)
     outputs = net.forward(output_layers)
-    
-    # Tespit sonuçlarını işle ve çiz
+
     process_detections(frame, outputs)
-    
-    # Sonucu ekranda göster
+
     cv2.imshow('Hizli Nesne Tanima (YOLOv3-Tiny)', frame)
-    
-    # 'q' tuşuna basılırsa döngüden çık
+
     if cv2.waitKey(1) & 0xFF == ord('q'):
         break
 
 # Kaynakları serbest bırak ve pencereleri kapat
 cap.release()
+
 cv2.destroyAllWindows()
